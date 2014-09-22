@@ -18,7 +18,7 @@ static void testCreateOpenClose(void);
 static void testSinglePageContent(void);
 
 /* main function running all tests */
-int main (void) {
+int main(void) {
     testName = "";
 
     initStorageManager();
@@ -29,7 +29,6 @@ int main (void) {
     return 0;
 }
 
-
 /* check a return code. If it is not RC_OK then output a message, error description, and exit */
 /* Try to create, open, and close a page file */
 void testCreateOpenClose(void) {
@@ -38,7 +37,7 @@ void testCreateOpenClose(void) {
     testName = "test create open and close methods";
 
     TEST_CHECK(createPageFile (TESTPF));
-  
+
     TEST_CHECK(openPageFile (TESTPF, &fh));
     ASSERT_TRUE(strcmp(fh.fileName, TESTPF) == 0, "filename correct");
     ASSERT_TRUE((fh.totalNumPages == 1), "expect 1 page in new file");
@@ -67,7 +66,7 @@ void testSinglePageContent(void) {
     TEST_CHECK(createPageFile (TESTPF));
     TEST_CHECK(openPageFile (TESTPF, &fh));
     printf("created and opened file\n");
-  
+
     // read first page into handle
     TEST_CHECK(readFirstBlock (&fh, ph));
     // the page should be empty (zero bytes)
@@ -75,7 +74,7 @@ void testSinglePageContent(void) {
         ASSERT_TRUE((ph[i] == 0), "expected zero byte in first page of freshly initialized page");
     }
     printf("first block was empty\n");
-    
+
     // change ph to be a string and write that one to disk
     for (i=0; i < PAGE_SIZE; i++) {
         ph[i] = (i % 10) + '0';
@@ -91,7 +90,7 @@ void testSinglePageContent(void) {
     printf("reading first block\n");
 
     // destroy new page file
-    TEST_CHECK(destroyPageFile (TESTPF));  
-  
+    TEST_CHECK(destroyPageFile (TESTPF));
+
     TEST_DONE();
 }
