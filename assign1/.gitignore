@@ -1,0 +1,4 @@
+*.o
+storage_mgr
+extra_test
+
