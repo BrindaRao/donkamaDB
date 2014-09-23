@@ -1,0 +1,7 @@
+#!/bin/zsh
+
+make clean
+make
+echo ""
+./storage_mgr
+./extra_test

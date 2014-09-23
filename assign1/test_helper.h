@@ -31,7 +31,6 @@ extern char *testName;
             printf("[%s-%s-L%i-%s] FAILED: expected <%s> but was <%s>: %s\n",TEST_INFO, expected, real, message); \
             exit(1); \
         } \
-        printf("[%s-%s-L%i-%s] OK: expected <%s> and was <%s>: %s\n",TEST_INFO, expected, real, message); \
     } while(0)
 
 // check whether two ints are equals
@@ -41,7 +40,6 @@ extern char *testName;
             printf("[%s-%s-L%i-%s] FAILED: expected <%i> but was <%i>: %s\n",TEST_INFO, expected, real, message); \
             exit(1); \
         } \
-        printf("[%s-%s-L%i-%s] OK: expected <%i> and was <%i>: %s\n",TEST_INFO, expected, real, message); \
     } while(0)
 
 // check whether two ints are equals
@@ -51,7 +49,6 @@ extern char *testName;
             printf("[%s-%s-L%i-%s] FAILED: expected true: %s\n",TEST_INFO, message); \
             exit(1); \
         } \
-        printf("[%s-%s-L%i-%s] OK: expected true: %s\n",TEST_INFO, message); \
     } while(0)
 
 
@@ -63,7 +60,6 @@ extern char *testName;
             printf("[%s-%s-L%i-%s] FAILED: expected an error: %s\n",TEST_INFO, message); \
             exit(1); \
         } \
-        printf("[%s-%s-L%i-%s] OK: expected an error and was RC <%i>: %s\n",TEST_INFO, result , message); \
     } while(0)
 
 // test worked

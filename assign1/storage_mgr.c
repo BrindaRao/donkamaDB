@@ -45,7 +45,8 @@ void initStorageManager(void) {
 
 RC createPageFile(char *fileName) {
     FILE *fp;
-    SM_PageHandle ph;
+    SM_FileHandle fh;
+    RC r;
 
     // if file exists
     fp = fopen(fileName, "r");
@@ -53,19 +54,25 @@ RC createPageFile(char *fileName) {
         fclose(fp);
         return RC_ERROR;
     }
-    // else
+    // else create file
     fp = fopen(fileName, "w");
-    ph = (SM_PageHandle)malloc(PAGE_SIZE);
-    memset(ph, 0, PAGE_SIZE);
-    if (fwrite(ph, PAGE_SIZE, 1, fp) == -1) {
+    SM_PageHandle memPage = (SM_PageHandle)malloc(PAGE_SIZE);
+    memset(memPage, 0, PAGE_SIZE);
+    if (fseek(fp, 0, SEEK_SET) != 0) {
+        return RC_WRITE_FAILED;
+    }
+    if (fwrite(memPage, 1, PAGE_SIZE, fp) != PAGE_SIZE) {
         return RC_WRITE_FAILED;
     }
     fclose(fp);
-    free(ph);
     return RC_OK;
 }
 
 RC openPageFile(char *fileName, SM_FileHandle *fHandle) {
+    if (isValid(fHandle)) {
+        return RC_OK;
+    }
+
     FILE *fp;
 
     fp = fopen(fileName, "r");
@@ -111,13 +118,13 @@ RC readBlock(int pageNum, SM_FileHandle *fHandle, SM_PageHandle memPage) {
     }
 
     fp = fopen(fHandle->fileName, "r");
-    if (pageNum > getFilePageNumber(fp)) {
+    if (pageNum >= fHandle->totalNumPages || pageNum < 0) {
         fclose(fp);
         return RC_READ_NON_EXISTING_PAGE;
     }
-    fseek(fp, SEEK_SET, (pageNum - 1) * PAGE_SIZE);
-    fread(memPage, PAGE_SIZE, 1, fp);
-    fHandle->curPagePos = pageNum + 1;
+    fseek(fp, pageNum * PAGE_SIZE, SEEK_SET);
+    fread(memPage, 1, PAGE_SIZE, fp);
+    fHandle->curPagePos = pageNum;
     fclose(fp);
     return RC_OK;
 }
@@ -127,7 +134,7 @@ int getBlockPos(SM_FileHandle *fHandle) {
 }
 
 RC readFirstBlock(SM_FileHandle *fHandle, SM_PageHandle memPage) {
-    return readBlock(1, fHandle, memPage);
+    return readBlock(0, fHandle, memPage);
 }
 
 RC readPreviousBlock(SM_FileHandle *fHandle, SM_PageHandle memPage) {
@@ -143,7 +150,7 @@ RC readNextBlock(SM_FileHandle *fHandle, SM_PageHandle memPage) {
 }
 
 RC readLastBlock(SM_FileHandle *fHandle, SM_PageHandle memPage) {
-    return readBlock(getLastPageNumber(fHandle->fileName), fHandle, memPage);
+    return readBlock(fHandle->totalNumPages - 1, fHandle, memPage);
 }
 
 /* 
@@ -158,13 +165,22 @@ RC writeBlock(int pageNum, SM_FileHandle *fHandle, SM_PageHandle memPage) {
     }
 
     fp = fopen(fHandle->fileName, "r+");
-    if (pageNum > getFilePageNumber(fp) + 1) {
+    if (pageNum > fHandle->totalNumPages) {
         fclose(fp);
         return RC_READ_NON_EXISTING_PAGE;
     }
-    fseek(fp, SEEK_SET, (pageNum - 1) * PAGE_SIZE);
-    fwrite(memPage, PAGE_SIZE, 1, fp);
-    fHandle->curPagePos = pageNum + 1;
+    if (fseek(fp, pageNum * PAGE_SIZE, SEEK_SET) != 0) {
+        fclose(fp);
+        return RC_WRITE_FAILED;
+    }
+    if (fwrite(memPage, 1, PAGE_SIZE, fp) != PAGE_SIZE) {
+        fclose(fp);
+        return RC_WRITE_FAILED;
+    }
+    if (fHandle->totalNumPages == pageNum) {
+        fHandle->totalNumPages++;
+    }
+    fHandle->curPagePos = pageNum;
     fclose(fp);
     return RC_OK;
 }
@@ -176,7 +192,7 @@ RC writeCurrentBlock(SM_FileHandle *fHandle, SM_PageHandle memPage) {
 RC appendEmptyBlock(SM_FileHandle *fHandle) {
     SM_PageHandle memPage = (SM_PageHandle)malloc(PAGE_SIZE);
     memset(memPage, 0, PAGE_SIZE);
-    return writeBlock(getLastPageNumber(fHandle->fileName), fHandle, memPage);
+    return writeBlock(fHandle->totalNumPages, fHandle, memPage);
 }
 
 RC ensureCapacity(int numberOfPages, SM_FileHandle *fHandle) {
@@ -188,13 +204,20 @@ RC ensureCapacity(int numberOfPages, SM_FileHandle *fHandle) {
 
     fp = fopen(fHandle->fileName, "r");
     if (fp == NULL) {
+        fclose(fp);
+        printf("file not found\n");
         return RC_FILE_NOT_FOUND;
     }
     if (fHandle->totalNumPages != getFilePageNumber(fp)) {
+        fclose(fp);
+        printf("totalNumPages not real\n");
         return RC_ERROR;
     }
     if (fHandle->totalNumPages != numberOfPages) {
+        fclose(fp);
+        printf("totalNumPages not equal\n");
         return RC_ERROR;
     }
+    fclose(fp);
     return RC_OK;
 }
