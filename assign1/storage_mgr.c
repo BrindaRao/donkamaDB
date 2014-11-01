@@ -35,7 +35,7 @@ int getLastPageNumber(char *fileName) {
     return result;
 }
 
-/* 
+/*
     Manipulating Page Files
 */
 
@@ -106,7 +106,7 @@ RC destroyPageFile(char *fileName) {
     return RC_OK;
 }
 
-/* 
+/*
     Reading Files
 */
 
@@ -153,7 +153,7 @@ RC readLastBlock(SM_FileHandle *fHandle, SM_PageHandle memPage) {
     return readBlock(fHandle->totalNumPages - 1, fHandle, memPage);
 }
 
-/* 
+/*
     Writing Files
 */
 
