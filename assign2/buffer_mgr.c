@@ -79,6 +79,32 @@ RC initBufferPool(BM_BufferPool *const bm, const char *const pageFileName, const
 RC shutdownBufferPool(BM_BufferPool *const bm) {
     // make sure every page is successfuly write to file
     // destory every variable
+    struct PoolInfo *np = bm->mgmtData;
+    struct PageInfo *pages = np->pages;
+
+    SM_FileHandle fh;
+    openPageFile(bm->pageFile, &fh);
+
+    for(int i = 0; i < bm->numPages; i++) {
+        if (pages[i].isdirty == 1 && pages[i].fixcount > 0) {
+            writeBlock(pages[i].ph->pageNum, &fh, pages[i].ph->data);
+            np->writeio++;
+            pages[i].writecount++;
+        }
+        if (pages[i].ph != NULL) {
+            free(pages[i].ph);
+            free(pages[i].ph->data);
+        }
+        pages[i].isactive = 0;
+        pages[i].readcount = 0;
+        pages[i].writecount = 0;
+        pages[i].fixcount = 0;
+        pages[i].isdirty = false;
+        pages[i].priority = -1;
+        pages[i].ph = NULL;
+    }
+    closePageFile(&fh);
+
     return RC_OK;
 }
 
@@ -167,6 +193,26 @@ RC unpinPage(BM_BufferPool *const bm, BM_PageHandle *const page) {
 
 RC forcePage(BM_BufferPool *const bm, BM_PageHandle *const page) {
     // force write the page to file
+    struct PoolInfo *np = bm->mgmtData;
+    struct PageInfo *pages = np->pages;
+
+    SM_FileHandle fh;
+    openPageFile(bm->pageFile, &fh);
+    writeBlock(page->pageNum, &fh, page->data);
+    closePageFile(&fh);
+
+    // sync the pagehandle with pool
+    int found = 0;
+    for (int i = 0; i < bm->numPages; i++) {
+        if (pages[i].isactive == 1 && pages[i].ph->pageNum == page->pageNum) {
+            found = i;
+            break;
+        }
+    }
+    pages[found].writecount++;
+    strcpy(pages[found].ph->data, page->data);
+
+    np->writeio++;
     return RC_OK;
 }
 
