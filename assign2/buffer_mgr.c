@@ -17,10 +17,12 @@ typedef struct PageInfo {
     BM_PageHandle *ph;
 } PageInfo;
 
-int globalread = 0;
-int globalwrite = 0;
-
-int globalpriority = 0;
+typedef struct PoolInfo {
+    int readio;
+    int writeio;
+    int prioritycount;
+    PageInfo *pages;
+} PoolInfo;
 
 void printpri(BM_BufferPool *const bm) {
     struct PageInfo *pages;
@@ -45,6 +47,7 @@ RC initBufferPool(BM_BufferPool *const bm, const char *const pageFileName, const
     closePageFile(&fh);
 
     // initialize BufferPool
+    struct PoolInfo *np = (PoolInfo*) malloc (sizeof(PoolInfo));
     struct PageInfo *pages;
     pages = (PageInfo*) malloc (sizeof(PageInfo) * numPages);
 
@@ -58,13 +61,15 @@ RC initBufferPool(BM_BufferPool *const bm, const char *const pageFileName, const
         pages[i].ph = NULL;
     }
 
+    np->readio = 0;
+    np->writeio = 0;
+    np->prioritycount = 0;
+    np->pages = pages;
+
     bm->pageFile = pageFileName;
     bm->numPages = numPages;
     bm->strategy = strategy;
-    bm->mgmtData = pages;
-
-    globalread = 0;
-    globalwrite = 0;
+    bm->mgmtData = np;
 
     // printPoolContent(bm);
 
@@ -79,8 +84,8 @@ RC shutdownBufferPool(BM_BufferPool *const bm) {
 
 RC forceFlushPool(BM_BufferPool *const bm) {
     // force write every page to file
-    struct PageInfo *pages;
-    pages = bm->mgmtData;
+    struct PoolInfo *np = bm->mgmtData;
+    struct PageInfo *pages = np->pages;
 
     for (int i = 0; i < bm->numPages; i++) {
         if (pages[i].isactive == 1 && pages[i].isdirty == true) {
@@ -96,8 +101,8 @@ RC markDirty(BM_BufferPool *const bm, BM_PageHandle *const page) {
     // mark the page dirty
     // printf("markdirty %d\n", page->pageNum);
 
-    struct PageInfo *pages;
-    pages = bm->mgmtData;
+    struct PoolInfo *np = bm->mgmtData;
+    struct PageInfo *pages = np->pages;
 
     int foundpoolposition = -1;
 
@@ -126,8 +131,8 @@ RC unpinPage(BM_BufferPool *const bm, BM_PageHandle *const page) {
     // unpin the page
     // printf("unpin %d\n", page->pageNum);
 
-    struct PageInfo *pages;
-    pages = bm->mgmtData;
+    struct PoolInfo *np = bm->mgmtData;
+    struct PageInfo *pages = np->pages;
 
     int foundpoolposition = -1;
 
@@ -149,7 +154,7 @@ RC unpinPage(BM_BufferPool *const bm, BM_PageHandle *const page) {
         writeBlock(page->pageNum, &fh, page->data);
         closePageFile(&fh);
         pages[foundpoolposition].writecount++;
-        globalwrite++;
+        np->writeio++;
     }
 
     pages[foundpoolposition].fixcount--;
@@ -172,8 +177,8 @@ RC pinPage(BM_BufferPool *const bm, BM_PageHandle *const page, const PageNumber 
     // printPoolContent(bm);
     // printpri(bm);
 
-    struct PageInfo *pages;
-    pages = bm->mgmtData;
+    struct PoolInfo *np = bm->mgmtData;
+    struct PageInfo *pages = np->pages;
 
     // check if page is already in pool OR pool is not full 
     int foundpoolposition = -1;
@@ -201,7 +206,6 @@ RC pinPage(BM_BufferPool *const bm, BM_PageHandle *const page, const PageNumber 
                 foundpoolposition = i;
             }
         }
-
     }
 
     // if still can't find out a place
@@ -220,19 +224,18 @@ RC pinPage(BM_BufferPool *const bm, BM_PageHandle *const page, const PageNumber 
         // update a pool
         // printf("update\n");
         if (bm->strategy == RS_LRU) {
-            pages[foundpoolposition].priority = ++globalpriority;
+            pages[foundpoolposition].priority = ++(np->prioritycount);
         }
         // pages[foundpoolposition].readcount++;
-        pages[foundpoolposition].fixcount++;
         // readBlock(pageNum, &fh, pages[foundpoolposition].ph->data);
         // globalread++;
+        pages[foundpoolposition].fixcount++;
         page->pageNum = pageNum;
         strcpy(page->data, pages[foundpoolposition].ph->data);
     } else {
         // add a new or replace a pool
-
         if (pages[foundpoolposition].isactive == 1) {
-            // check old page
+            // check old page, free the memory
             free(pages[foundpoolposition].ph->data);
             free(pages[foundpoolposition].ph);
         }
@@ -243,14 +246,14 @@ RC pinPage(BM_BufferPool *const bm, BM_PageHandle *const page, const PageNumber 
         page->pageNum = pageNum;
         newpage->pageNum = pageNum;
         readBlock(pageNum, &fh, page->data);
-        globalread++;
+        np->readio++;
         strcpy(newpage->data, page->data);
 
         pages[foundpoolposition].isactive = 1;
         pages[foundpoolposition].readcount = 1;
         pages[foundpoolposition].writecount = 0;
         pages[foundpoolposition].fixcount = 1;
-        pages[foundpoolposition].priority = ++globalpriority;
+        pages[foundpoolposition].priority = ++(np->prioritycount);
         pages[foundpoolposition].isdirty = false;
         pages[foundpoolposition].ph = newpage;
 
@@ -266,8 +269,8 @@ RC pinPage(BM_BufferPool *const bm, BM_PageHandle *const page, const PageNumber 
 // Statistics Interface
 PageNumber *getFrameContents(BM_BufferPool *const bm) {
     int *contents = malloc(sizeof(int) * bm->numPages);
-    struct PageInfo *pages;
-    pages = bm->mgmtData;
+    struct PoolInfo *np = bm->mgmtData;
+    struct PageInfo *pages = np->pages;
 
     for (int i = 0; i < bm->numPages; i++) {
         if (pages[i].isactive == 1) {
@@ -282,8 +285,8 @@ PageNumber *getFrameContents(BM_BufferPool *const bm) {
 
 bool *getDirtyFlags(BM_BufferPool *const bm) {
     bool *flags = (bool*)malloc(sizeof(bool) * bm->numPages);
-    struct PageInfo *pages;
-    pages = bm->mgmtData;
+    struct PoolInfo *np = bm->mgmtData;
+    struct PageInfo *pages = np->pages;
 
     for (int i = 0; i < bm->numPages; i++) {
         flags[i] = pages[i].isdirty;
@@ -294,8 +297,8 @@ bool *getDirtyFlags(BM_BufferPool *const bm) {
 
 int *getFixCounts(BM_BufferPool *const bm) {
     int *fixcounts = malloc(sizeof(bool) * bm->numPages);
-    struct PageInfo *pages;
-    pages = bm->mgmtData;
+    struct PoolInfo *np = bm->mgmtData;
+    struct PageInfo *pages = np->pages;
 
     for (int i = 0; i < bm->numPages; i++) {
         fixcounts[i] = pages[i].fixcount;
@@ -306,32 +309,12 @@ int *getFixCounts(BM_BufferPool *const bm) {
 
 int getNumReadIO(BM_BufferPool *const bm) {
     // calculate total read io
-    int readio = 0;
-    struct PageInfo *pages;
-    pages = bm->mgmtData;
-
-    for (int i = 0; i < bm->numPages; i++) {
-        if (pages[i].isactive == 1) {
-            readio += pages[i].readcount;
-        }
-    }
-
-    // return readio;
-    return globalread;
+    struct PoolInfo *np = bm->mgmtData;
+    return np->readio;
 }
 
 int getNumWriteIO(BM_BufferPool *const bm) {
     // calculate total write io
-    int writeio = 0;
-    struct PageInfo *pages;
-    pages = bm->mgmtData;
-
-    for (int i = 0; i < bm->numPages; i++) {
-        if (pages[i].isactive == 1) {
-            writeio += pages[i].writecount;
-        }
-    }
-
-    // return writeio;
-    return globalwrite;
+    struct PoolInfo *np = bm->mgmtData;
+    return np->writeio;
 }
