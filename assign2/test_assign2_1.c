@@ -11,7 +11,7 @@
 // var to store the current test's name
 char *testName;
 
-// check whether two the content of a buffer pool is the same as an expected content 
+// check whether two the content of a buffer pool is the same as an expected content
 // (given in the format produced by sprintPoolContent)
 #define ASSERT_EQUALS_POOL(expected,bm,message) \
     do { \
@@ -137,11 +137,11 @@ void testReadPage() {
 
 void testFIFO() {
     // expected results
-    const char *poolContents[] = { 
-        "[0 0],[-1 0],[-1 0]" , 
-        "[0 0],[1 0],[-1 0]", 
-        "[0 0],[1 0],[2 0]", 
-        "[3 0],[1 0],[2 0]", 
+    const char *poolContents[] = {
+        "[0 0],[-1 0],[-1 0]" ,
+        "[0 0],[1 0],[-1 0]",
+        "[0 0],[1 0],[2 0]",
+        "[3 0],[1 0],[2 0]",
         "[3 0],[4 0],[2 0]",
         "[3 0],[4 1],[2 0]",
         "[3 0],[4 1],[5x0]",
@@ -167,6 +167,7 @@ void testFIFO() {
 
     // reading some pages linearly with direct unpin and no modifications
     for(i = 0; i < numLinRequests; i++) {
+        printf("%d\n", i);
         pinPage(bm, h, requests[i]);
         unpinPage(bm, h);
         ASSERT_EQUALS_POOL(poolContents[i], bm, "check pool content");
@@ -210,10 +211,10 @@ void testFIFO() {
 // test the LRU page replacement strategy
 void testLRU(void) {
     // expected results
-    const char *poolContents[] = { 
+    const char *poolContents[] = {
         // read first five pages and directly unpin them
-        "[0 0],[-1 0],[-1 0],[-1 0],[-1 0]" , 
-        "[0 0],[1 0],[-1 0],[-1 0],[-1 0]", 
+        "[0 0],[-1 0],[-1 0],[-1 0],[-1 0]" ,
+        "[0 0],[1 0],[-1 0],[-1 0],[-1 0]",
         "[0 0],[1 0],[2 0],[-1 0],[-1 0]",
         "[0 0],[1 0],[2 0],[3 0],[-1 0]",
         "[0 0],[1 0],[2 0],[3 0],[4 0]",
