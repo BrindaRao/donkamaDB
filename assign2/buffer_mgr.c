@@ -31,7 +31,8 @@ void printpri(BM_BufferPool *const bm) {
     PageNumber *frameContent;
     int *pr;
 
-    for (int i = 0; i < bm->numPages; i++)
+    int i;
+    for (i = 0; i < bm->numPages; i++)
         printf("[%d]", pages[i].priority);
     printf("\n");
 }
@@ -51,7 +52,8 @@ RC initBufferPool(BM_BufferPool *const bm, const char *const pageFileName, const
     struct PageInfo *pages;
     pages = (PageInfo*) malloc (sizeof(PageInfo) * numPages);
 
-    for (int i = 0; i < numPages; i++) {
+    int i;
+    for (i = 0; i < numPages; i++) {
         pages[i].isactive = 0;
         pages[i].readcount = 0;
         pages[i].writecount = 0;
@@ -85,7 +87,8 @@ RC shutdownBufferPool(BM_BufferPool *const bm) {
     SM_FileHandle fh;
     openPageFile(bm->pageFile, &fh);
 
-    for(int i = 0; i < bm->numPages; i++) {
+    int i;
+    for(i = 0; i < bm->numPages; i++) {
         if (pages[i].isdirty == 1 && pages[i].fixcount > 0) {
             writeBlock(pages[i].ph->pageNum, &fh, pages[i].ph->data);
             np->writeio++;
@@ -113,7 +116,8 @@ RC forceFlushPool(BM_BufferPool *const bm) {
     struct PoolInfo *np = bm->mgmtData;
     struct PageInfo *pages = np->pages;
 
-    for (int i = 0; i < bm->numPages; i++) {
+    int i;
+    for (i = 0; i < bm->numPages; i++) {
         if (pages[i].isactive == 1 && pages[i].isdirty == true) {
             pages[i].isdirty = false;
         }
@@ -132,7 +136,8 @@ RC markDirty(BM_BufferPool *const bm, BM_PageHandle *const page) {
 
     int foundpoolposition = -1;
 
-    for (int i = 0; i < bm->numPages; i++) {
+    int i;
+    for (i = 0; i < bm->numPages; i++) {
         if (pages[i].isactive == 1 && pages[i].ph->pageNum == page->pageNum) {
             // printf("found: %d\n", i);
             foundpoolposition = i;
@@ -162,7 +167,8 @@ RC unpinPage(BM_BufferPool *const bm, BM_PageHandle *const page) {
 
     int foundpoolposition = -1;
 
-    for (int i = 0; i < bm->numPages; i++) {
+    int i;
+    for (i = 0; i < bm->numPages; i++) {
         if (pages[i].isactive == 1 && pages[i].ph->pageNum == page->pageNum) {
             // printf("found: %d\n", i);
             foundpoolposition = i;
@@ -203,7 +209,8 @@ RC forcePage(BM_BufferPool *const bm, BM_PageHandle *const page) {
 
     // sync the pagehandle with pool
     int found = 0;
-    for (int i = 0; i < bm->numPages; i++) {
+    int i;
+    for (i = 0; i < bm->numPages; i++) {
         if (pages[i].isactive == 1 && pages[i].ph->pageNum == page->pageNum) {
             found = i;
             break;
@@ -228,7 +235,8 @@ RC pinPage(BM_BufferPool *const bm, BM_PageHandle *const page, const PageNumber 
 
     // check if page is already in pool OR pool is not full 
     int foundpoolposition = -1;
-    for (int i = 0; i < bm->numPages; i++) {
+    int i;
+    for (i = 0; i < bm->numPages; i++) {
         // if found a blank pool
         if (pages[i].isactive == 0) {
             // printf("found blank\n");
@@ -246,7 +254,7 @@ RC pinPage(BM_BufferPool *const bm, BM_PageHandle *const page, const PageNumber 
     // if pool is full, find out a place to replace
     int minpriority = INT_MAX;
     if (foundpoolposition == -1) {
-        for (int i = 0; i < bm->numPages; i++) {
+        for (i = 0; i < bm->numPages; i++) {
             if (pages[i].fixcount == 0 && pages[i].priority < minpriority) {
                 minpriority = pages[i].priority;
                 foundpoolposition = i;
@@ -318,7 +326,8 @@ PageNumber *getFrameContents(BM_BufferPool *const bm) {
     struct PoolInfo *np = bm->mgmtData;
     struct PageInfo *pages = np->pages;
 
-    for (int i = 0; i < bm->numPages; i++) {
+    int i;
+    for (i = 0; i < bm->numPages; i++) {
         if (pages[i].isactive == 1) {
             contents[i] = pages[i].ph->pageNum;
         } else {
@@ -334,7 +343,8 @@ bool *getDirtyFlags(BM_BufferPool *const bm) {
     struct PoolInfo *np = bm->mgmtData;
     struct PageInfo *pages = np->pages;
 
-    for (int i = 0; i < bm->numPages; i++) {
+    int i;
+    for (i = 0; i < bm->numPages; i++) {
         flags[i] = pages[i].isdirty;
     }
 
@@ -346,7 +356,8 @@ int *getFixCounts(BM_BufferPool *const bm) {
     struct PoolInfo *np = bm->mgmtData;
     struct PageInfo *pages = np->pages;
 
-    for (int i = 0; i < bm->numPages; i++) {
+    int i;
+    for (i = 0; i < bm->numPages; i++) {
         fixcounts[i] = pages[i].fixcount;
     }
 
