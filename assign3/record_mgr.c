@@ -409,6 +409,41 @@ RC insertRecord(RM_TableData *rel, Record *record) {
 }
 
 RC deleteRecord(RM_TableData *rel, RID id) {
+    int slot, size, last, newslot;
+    mgmt *m = (mgmt *)rel->mgmtData;
+
+    size = m->lengthofrecord;
+    last = id.page;
+    slot = m->slotperpage;
+    newslot = id.slot;
+
+    char *flag = (char *) malloc(sizeof(char) * slot);
+    memset(flag, 0, sizeof(char) * slot);
+
+    SM_FileHandle fh;
+    SM_PageHandle ph;
+    ph = (char *) malloc(sizeof(char) * PAGE_SIZE);
+    memset(ph, 0, sizeof(char) * PAGE_SIZE);
+
+    openPageFile(m->name, &fh);
+    readBlock(last, &fh, ph);
+    memcpy(flag, ph, sizeof(char) * slot);
+
+    flag[newslot] = 0;
+
+    char *strvalue = (char *) malloc(sizeof(char) * size);
+    memset(ph, 0, sizeof(char) * size);
+
+    readBlock(last, &fh, ph);
+    memcpy(ph, flag, sizeof(char) * slot);
+    memcpy(ph + newslot * size + sizeof(char) * slot, strvalue, size);
+
+    writeBlock(last, &fh, ph);
+    closePageFile(&fh);
+
+    free(flag);
+    free(strvalue);
+    free(ph);
 
     ((mgmt *) rel->mgmtData)->records -= 1;
     return RC_OK;
