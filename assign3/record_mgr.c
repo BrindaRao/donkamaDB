@@ -6,11 +6,14 @@
 #include "storage_mgr.h"
 
 #define BF_MODE RS_FIFO
-#define BF_PAGE 5
+#define BF_PAGE 3
 
 typedef struct mgmt {
     int records;
     BM_BufferPool *bm;
+    int lengthofrecord;
+    int slotperpage;
+    int last;
 } mgmt;
 
 void print_value(char *name, Value *value) {
@@ -120,6 +123,15 @@ int get_schema(char *str, int len, Schema **schema) {
     return pos;
 }
 
+int slot_per_page(int size) {
+    int r = PAGE_SIZE / size;
+    int v = PAGE_SIZE / size;
+    while (r * (size + 1) >= PAGE_SIZE) {
+        r = r - 1;
+    }
+    return r;
+}
+
 RC initRecordManager(void *mgmtData) {
     initStorageManager();
     return RC_OK;
@@ -149,13 +161,19 @@ RC createTable(char *name, Schema *schema) {
     createPageFile(name);
     openPageFile(name, &fh);
     ph = (char *) malloc(sizeof(char) * PAGE_SIZE);
+    memset(ph, 0, sizeof(char) * PAGE_SIZE);
+
     // write information to pagehandle
     // ...
     int pos = 0;
     pos = add_int(ph, pos, 0);
     pos = add_schema(ph, pos, schema);
-
     writeBlock (0, &fh, ph);
+
+    // since all the flag is zero, we don't need write anything
+    // just append an empty block
+    appendEmptyBlock(&fh);
+
     closePageFile(&fh);
     free(ph);
     return RC_OK;
@@ -198,11 +216,14 @@ RC openTable(RM_TableData *rel, char *name) {
 
     m->bm = bm;
     m->records = tr;
+    m->lengthofrecord = getRecordSize(*schema);
+    m->slotperpage = slot_per_page(m->lengthofrecord);
+    m->last = 1;
 
     rel->name = name;
     rel->schema = *schema;
     rel->mgmtData = (void *)m;
-    unpinPage(bm, ph);
+    // unpinPage(bm, ph);
     free(ph);
     return RC_OK;
 }
@@ -210,18 +231,14 @@ RC openTable(RM_TableData *rel, char *name) {
 RC closeTable(RM_TableData *rel) {
     mgmt *m = (mgmt *)rel->mgmtData;
     BM_PageHandle *ph = MAKE_PAGE_HANDLE();
-    BM_BufferPool *bm = m->bm;
-    pinPage(bm, ph, 0);
-    // update records
+    pinPage(m->bm, ph, 0);
+    // update number of records
     add_int(ph->data, 0, m->records);
-    markDirty(bm, ph);
-    unpinPage(bm, ph);
+    markDirty(m->bm, ph);
+    unpinPage(m->bm, ph);
     shutdownBufferPool(m->bm);
-
     free(m->bm);
     free(rel->mgmtData);
-    free(ph);
-
     return RC_OK;
 }
 
@@ -234,12 +251,70 @@ int getNumTuples(RM_TableData *rel) {
     return ((mgmt *) rel->mgmtData)->records;
 }
 
+void record_to_string(char *str, Record *record) {
+
+}
+
 // handling records in a table
 RC insertRecord(RM_TableData *rel, Record *record) {
+    int slot, size, last, newslot;
+    mgmt *m = (mgmt *)rel->mgmtData;
+    BM_PageHandle *ph = MAKE_PAGE_HANDLE();
+    BM_BufferPool *bm = m->bm;
+
+    size = m->lengthofrecord;
+    last = m->last;
+    slot = m->slotperpage;
+
+    printf("Insert page %d totalslot %d\n", last, slot);
+
+    char *flag = (char *) malloc(sizeof(char) * slot);
+    memset(flag, 0, sizeof(char) * slot);
+
+    // check last page is avaliable
+    pinPage(bm, ph, last);
+    memcpy(flag, ph->data, sizeof(char) * slot);
+    unpinPage(bm, ph);
+
+    // for (newslot = slot - 1; newslot >=0; newslot--) {
+    //     if (flag[newslot] == 1) {
+    //         break;
+    //     }
+    // }
+    // // if no available slot
+    // if (newslot == slot - 1) {
+    //     last++;
+    //     m->last = last;
+    //     newslot = -1;
+    //     memset(flag, 0, sizeof(char) * slot);
+    // }
+    // newslot = newslot + 1;
+    // flag[newslot] = 1;
+
+    // printf("Insert page %d slot %d\n", last, newslot);
+
+    // char *strvalue = (char *) malloc(sizeof(char) * size);
+    // record_to_string(strvalue, record);
+
+    // pinPage(bm, ph, last);
+    // // update slog flag
+    // memcpy(ph->data, flag, sizeof(char) * slot);
+    // // insert record
+    // memcpy(ph->data + newslot * size + sizeof(char) * slot, strvalue, size);
+    // markDirty(bm, ph);
+    // unpinPage(bm, ph);
+
+    // record->id.page = last;
+    // record->id.slot = newslot;
+    // ((mgmt *) rel->mgmtData)->records += 1;
+    // free(flag);
+    // free(strvalue);
     return RC_OK;
 }
 
 RC deleteRecord(RM_TableData *rel, RID id) {
+
+    ((mgmt *) rel->mgmtData)->records -= 1;
     return RC_OK;
 }
 
@@ -271,19 +346,18 @@ int getRecordSize(Schema *schema) {
     int i, sum;
     sum = 0;
     for (i = 0; i < schema->numAttr; i++) {
-        // Plus 1 means a byte for validate NULL value
         switch (schema->dataTypes[i]) {
             case DT_INT :
-                sum += sizeof(int) + 1;
+                sum += sizeof(int);
                 break;
             case DT_STRING :
-                sum += schema->typeLength[i] + 1;
+                sum += schema->typeLength[i];
                 break;
             case DT_FLOAT :
-                sum += sizeof(float) + 1;
+                sum += sizeof(float);
                 break;
             case DT_BOOL :
-                sum += sizeof(bool) + 1;
+                sum += sizeof(bool);
                 break;
         }
     }
