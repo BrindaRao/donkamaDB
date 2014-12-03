@@ -39,7 +39,7 @@ void print_value(char *name, Value *value) {
 void print_record(Record *record, Schema *schema) {
     int i;
     Value *v = (Value *)record->data;
-    printf("Record total : %d, data : %d\n", schema->numAttr, record->data);
+    printf("Record total : %d, page %d slot %d\n", schema->numAttr, record->id.page, record->id.slot);
     for (i = 0; i < schema->numAttr; i++) {
         print_value(schema->attrNames[i], &v[i]);
     }
@@ -396,7 +396,7 @@ RC insertRecord(RM_TableData *rel, Record *record) {
     // markDirty(bm, ph);
     // unpinPage(bm, ph);
 
-    writeBlock (last, &fh, ph);
+    writeBlock(last, &fh, ph);
     closePageFile(&fh);
 
     record->id.page = last;
@@ -433,6 +433,7 @@ RC updateRecord(RM_TableData *rel, Record *record) {
     char *strvalue = (char *) malloc(sizeof(char) * size);
     record_to_string(strvalue, record, rel->schema);
 
+    openPageFile(m->name, &fh);
     readBlock(last, &fh, ph);
     memcpy(ph + newslot * size + sizeof(char) * slot, strvalue, size);
     // printf("write offset : %u : %d\n", newslot * size + sizeof(char) * slot, size);
@@ -445,7 +446,9 @@ RC updateRecord(RM_TableData *rel, Record *record) {
     // markDirty(bm, ph);
     // unpinPage(bm, ph);
 
-    writeBlock (last, &fh, ph);
+    printf("\n");
+
+    writeBlock(last, &fh, ph);
     closePageFile(&fh);
 
     free(strvalue);
