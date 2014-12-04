@@ -37,12 +37,39 @@ void print_value(char *name, Value *value) {
 }
 
 void print_record(Record *record, Schema *schema) {
-    int i;
-    Value *v = (Value *)record->data;
-    printf("Record total : %d, page %d slot %d\n", schema->numAttr, record->id.page, record->id.slot);
+    // int i;
+    // Value *v = (Value *)record->data;
+    // printf("Record total : %d, page %d slot %d\n", schema->numAttr, record->id.page, record->id.slot);
+    // for (i = 0; i < schema->numAttr; i++) {
+    //     print_value(schema->attrNames[i], &v[i]);
+    // }
+    int i, pos = 0;
+    int a;
+    float f;
+    char *c;
     for (i = 0; i < schema->numAttr; i++) {
-        print_value(schema->attrNames[i], &v[i]);
+        switch (schema->dataTypes[i]) {
+            case DT_INT :
+                get_int(record->data, pos, &a);
+                printf("int : %d ", a);
+                break;
+            case DT_STRING :
+                c = (char *) malloc(sizeof(char) * schema->typeLength[i]);
+                get_string(record->data, pos, c);
+                printf("str : %s", c);
+                free(c);
+                break;
+            case DT_FLOAT :
+                get_float(record->data, pos, &f);
+                printf("float : %f ", f);
+                break;
+            case DT_BOOL :
+                get_int(record->data, pos, &a);
+                printf("bool : %d ", a);
+                break;
+        }
     }
+
 }
 
 int add_int(char *str, int len, int n) {
@@ -236,7 +263,7 @@ RC openTable(RM_TableData *rel, char *name) {
     m->name = (char *) malloc(sizeof(char) * strlen(name));
     strcpy(m->name, name);
     m->records = tr;
-    m->lengthofrecord = getRecordStringSize(schema);
+    m->lengthofrecord = getRecordSize(schema);
     m->slotperpage = slot_per_page(m->lengthofrecord);
     m->last = 1;
 
@@ -380,12 +407,12 @@ RC insertRecord(RM_TableData *rel, Record *record) {
     newslot = newslot + 1;
     flag[newslot] = 1;
 
-    char *strvalue = (char *) malloc(sizeof(char) * size);
-    record_to_string(strvalue, record, rel->schema);
+    // char *strvalue = (char *) malloc(sizeof(char) * size);
+    // record_to_string(strvalue, record, rel->schema);
 
     readBlock(last, &fh, ph);
     memcpy(ph, flag, sizeof(char) * slot);
-    memcpy(ph + newslot * size + sizeof(char) * slot, strvalue, size);
+    memcpy(ph + newslot * size + sizeof(char) * slot, record->data, size);
     // printf("write offset : %u : %d\n", newslot * size + sizeof(char) * slot, size);
 
     // pinPage(bm, ph, last);
@@ -403,7 +430,7 @@ RC insertRecord(RM_TableData *rel, Record *record) {
     record->id.slot = newslot;
     ((mgmt *) rel->mgmtData)->records += 1;
     free(flag);
-    free(strvalue);
+    // free(strvalue);
     free(ph);
     return RC_OK;
 }
@@ -465,12 +492,12 @@ RC updateRecord(RM_TableData *rel, Record *record) {
     ph = (char *) malloc(sizeof(char) * PAGE_SIZE);
     memset(ph, 0, sizeof(char) * PAGE_SIZE);
 
-    char *strvalue = (char *) malloc(sizeof(char) * size);
-    record_to_string(strvalue, record, rel->schema);
+    // char *strvalue = (char *) malloc(sizeof(char) * size);
+    // record_to_string(strvalue, record, rel->schema);
 
     openPageFile(m->name, &fh);
     readBlock(last, &fh, ph);
-    memcpy(ph + newslot * size + sizeof(char) * slot, strvalue, size);
+    memcpy(ph + newslot * size + sizeof(char) * slot, record->data, size);
     // printf("write offset : %u : %d\n", newslot * size + sizeof(char) * slot, size);
 
     // pinPage(bm, ph, last);
@@ -486,7 +513,7 @@ RC updateRecord(RM_TableData *rel, Record *record) {
     writeBlock(last, &fh, ph);
     closePageFile(&fh);
 
-    free(strvalue);
+    // free(strvalue);
     free(ph);
     return RC_OK;
 }
@@ -494,7 +521,7 @@ RC updateRecord(RM_TableData *rel, Record *record) {
 RC getRecord(RM_TableData *rel, RID id, Record *record) {
     // printf("start record loc : %x\n", record);
     mgmt *m = (mgmt *)rel->mgmtData;
-    char *strvalue = (char *) malloc(sizeof(char) * m->lengthofrecord);
+    // char *strvalue = (char *) malloc(sizeof(char) * m->lengthofrecord);
 
     // read file
     SM_FileHandle fh;
@@ -506,14 +533,14 @@ RC getRecord(RM_TableData *rel, RID id, Record *record) {
     closePageFile(&fh);
 
     // get string and covert to records
-    memcpy(strvalue, ph + sizeof(char) * m->slotperpage + id.slot * m->lengthofrecord, m->lengthofrecord);
+    memcpy(record->data, ph + sizeof(char) * m->slotperpage + id.slot * m->lengthofrecord, m->lengthofrecord);
 
     // printf("read offset : %u : %d\n", sizeof(char) * m->slotperpage + id.slot * m->lengthofrecord, m->lengthofrecord);
 
     // createRecord(&record, rel->schema);
     // printf("create record loc : %x\n", record);
 
-    string_to_record(strvalue, record, rel->schema);
+    // string_to_record(strvalue, record, rel->schema);
 
     record->id.page = id.page;
     record->id.slot = id.slot;
@@ -521,7 +548,7 @@ RC getRecord(RM_TableData *rel, RID id, Record *record) {
     // printf("finish record loc : %x\n", record);
     // print_record(record, rel->schema);
 
-    free(strvalue);
+    // free(strvalue);
     free(ph);
     return RC_OK;
 }
@@ -564,7 +591,7 @@ RC next(RM_ScanHandle *scan, Record *record) {
     // while curp available
     int slots = m->slotperpage;
     int length = m->lengthofrecord;
-    char *str = (char *) malloc(sizeof(char) * length);
+    // char *str = (char *) malloc(sizeof(char) * length);
     char *flag = (char *) malloc(sizeof(char) * slots);
     int i;
     while (1 == curp) {
@@ -578,9 +605,9 @@ RC next(RM_ScanHandle *scan, Record *record) {
             if (flag[i] == 1) {
                 printf("check page %d: %d\n", curp, i);
     //          get string, string to record
-                memcpy(str, ph + sizeof(char) * slots + i * length, length);
+                memcpy(record->data, ph + sizeof(char) * slots + i * length, length);
                 // createRecord(&record, sc);
-                string_to_record(str, record, sc);
+                // string_to_record(str, record, sc);
     //          eval record
                 evalExpr(record, sc, scm->cond, &val);
     //          if equal
@@ -629,28 +656,6 @@ RC closeScan(RM_ScanHandle *scan) {
 }
 
 // dealing with schemas
-int getRecordStringSize(Schema *schema) {
-    int i, sum;
-    sum = 0;
-    for (i = 0; i < schema->numAttr; i++) {
-        switch (schema->dataTypes[i]) {
-            case DT_INT :
-                sum += sizeof(int);
-                break;
-            case DT_STRING :
-                sum += schema->typeLength[i] + 4;
-                break;
-            case DT_FLOAT :
-                sum += sizeof(float);
-                break;
-            case DT_BOOL :
-                sum += sizeof(bool);
-                break;
-        }
-    }
-    return sum;
-}
-
 int getRecordSize(Schema *schema) {
     int i, sum;
     sum = 0;
@@ -660,7 +665,7 @@ int getRecordSize(Schema *schema) {
                 sum += sizeof(int);
                 break;
             case DT_STRING :
-                sum += schema->typeLength[i];
+                sum += schema->typeLength[i] + sizeof(int);
                 break;
             case DT_FLOAT :
                 sum += sizeof(float);
@@ -699,8 +704,9 @@ RC freeSchema(Schema *schema) {
 RC createRecord(Record **record, Schema *schema) {
     Record *r = (Record *) malloc(sizeof(Record));
     // for a record, data is a array of values, so we should malloc space.
-    Value *v = (Value *) malloc(sizeof(Value) * schema->numAttr);
-    r->data = (char *)v;
+    // Value *v = (Value *) malloc(sizeof(Value) * schema->numAttr);
+    char *v = (char *) malloc(sizeof(char) * getRecordSize(schema));
+    r->data = v;
     *record = r;
     return RC_OK;
 }
@@ -712,39 +718,85 @@ RC freeRecord(Record *record) {
 }
 
 RC getAttr(Record *record, Schema *schema, int attrNum, Value **value) {
-    Value *v, *r;
-    v = (Value *)record->data;
-    // should malloc a new value that store the value from record
-    r = (Value *) malloc(sizeof(Value));
-    r->dt = schema->dataTypes[attrNum];
-    switch (r->dt) {
-        case DT_INT:
-            r->v.intV = v[attrNum].v.intV;
+    int i, pos = 0;
+    for (i = 0; i < attrNum; i++) {
+        switch (schema->dataTypes[i]) {
+            case DT_INT :
+                pos += sizeof(int);
+                break;
+            case DT_STRING :
+                pos += schema->typeLength[i] + sizeof(int);
+                break;
+            case DT_FLOAT :
+                pos += sizeof(float);
+                break;
+            case DT_BOOL :
+                pos += sizeof(int);
+                break;
+        }
+    }
+    Value *rec;
+    int a;
+    float f;
+    char *c;
+    switch (schema->dataTypes[attrNum]) {
+        case DT_INT :
+            get_int(record->data, pos, &a);
+            MAKE_VALUE(rec, DT_INT, a);
             break;
-        case DT_FLOAT:
-            r->v.floatV = v[attrNum].v.floatV;
+        case DT_STRING :
+            c = (char *) malloc(sizeof(char) * schema->typeLength[i]);
+            get_string(record->data, pos, c);
+            printf("get str %s\n", c);
+            MAKE_STRING_VALUE(rec, c);
+            free(c);
             break;
-        case DT_BOOL:
-            r->v.boolV = v[attrNum].v.boolV;
+        case DT_FLOAT :
+            get_float(record->data, pos, &f);
+            MAKE_VALUE(rec, DT_FLOAT, f);
             break;
-        case DT_STRING:
-            // use strcpy to copy all the strings
-            r->v.stringV = (char *) malloc(sizeof(char) * schema->typeLength[attrNum]);
-            strcpy(r->v.stringV, v[attrNum].v.stringV);
+        case DT_BOOL :
+            get_int(record->data, pos, &a);
+            MAKE_VALUE(rec, DT_BOOL, a);
             break;
     }
     // remember to return pointer of new value
-    *value = r;
+    *value = rec;
     return RC_OK;
 }
 
 RC setAttr(Record *record, Schema *schema, int attrNum, Value *value) {
-    Value *v = (Value *)record->data;
-    memcpy(v + attrNum, value, sizeof(Value)); // use memcpy to copy entire value
-    if (schema->dataTypes[attrNum] == DT_STRING) {
-        // if datatype is string, remember to copy all the char(strcpy)
-        v[attrNum].v.stringV = (char *) malloc(schema->typeLength[attrNum]);
-        strcpy(v[attrNum].v.stringV, value->v.stringV);
+    int i, pos = 0;
+    for (i = 0; i < attrNum; i++) {
+        switch (schema->dataTypes[i]) {
+            case DT_INT :
+                pos += sizeof(int);
+                break;
+            case DT_STRING :
+                pos += schema->typeLength[i] + sizeof(int);
+                break;
+            case DT_FLOAT :
+                pos += sizeof(float);
+                break;
+            case DT_BOOL :
+                pos += sizeof(int);
+                break;
+        }
+    }
+    // printf("pos %d of %d\n", pos, getRecordSize(schema));
+    switch (schema->dataTypes[attrNum]) {
+        case DT_INT :
+            add_int(record->data, pos, value->v.intV);
+            break;
+        case DT_STRING :
+            add_string(record->data, pos, value->v.stringV);
+            break;
+        case DT_FLOAT :
+            add_float(record->data, pos, value->v.floatV);
+            break;
+        case DT_BOOL :
+            add_int(record->data, pos, (int)(value->v.boolV));
+            break;
     }
     return RC_OK;
 }
