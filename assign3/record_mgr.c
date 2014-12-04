@@ -526,20 +526,107 @@ RC getRecord(RM_TableData *rel, RID id, Record *record) {
     return RC_OK;
 }
 
+typedef struct scmgmt{
+    int curpage;
+    int curslot;
+    Expr *cond;
+}scmgmt;
 
 // scans
 RC startScan(RM_TableData *rel, RM_ScanHandle *scan, Expr *cond) {
+    scmgmt *scm = (scmgmt *) malloc(sizeof(scmgmt));
+    // start search at page 1
+    scm->curpage = 1;
+    scm->curslot = 0;
+    scm->cond = cond;
+    scan->rel = rel;
+    scan->mgmtData = (void *)scm;
     return RC_OK;
 }
 
 RC next(RM_ScanHandle *scan, Record *record) {
-    return RC_OK;
+    scmgmt *scm = (scmgmt *)scan->mgmtData;
+    mgmt *m = (mgmt *)scan->rel->mgmtData;
+    Schema *sc = scan->rel->schema;
+
+    Value *val;
+
+    SM_FileHandle fh;
+    SM_PageHandle ph;
+    ph = (char *) malloc(sizeof(char) * PAGE_SIZE);
+    memset(ph, 0, sizeof(char) * PAGE_SIZE);
+    openPageFile(m->name, &fh);
+
+    // let curp = scm->curpage
+    int curp = scm->curpage;
+    // let curs = scm->curslot
+    int curs = scm->curslot;
+    // while curp available
+    int slots = m->slotperpage;
+    int length = m->lengthofrecord;
+    char *str = (char *) malloc(sizeof(char) * length);
+    char *flag = (char *) malloc(sizeof(char) * slots);
+    int i;
+    while (1 == curp) {
+    //  read curp
+        readBlock(curp, &fh, ph);
+    //  get flags
+        memcpy(flag, ph, sizeof(char) * slots);
+    //  while [curs] < [total slot]
+        for (i = curs; i < slots; i++) {
+    //      if flag available then
+            if (flag[i] == 1) {
+                printf("check page %d: %d\n", curp, i);
+    //          get string, string to record
+                memcpy(str, ph + sizeof(char) * slots + i * length, length);
+                // createRecord(&record, sc);
+                string_to_record(str, record, sc);
+    //          eval record
+                evalExpr(record, sc, scm->cond, &val);
+    //          if equal
+                if (val->v.boolV == 1) {
+                    print_record(record, sc);
+    //              save curpage, curslot
+    //              if this is the end of slot, then next will be a new page
+                    if (i == slots) {
+                        printf("new page\n");
+                        scm->curpage = curp + 1;
+                        scm->curslot = 0;
+                    } else {
+                        printf("save progress %d:%d\n", curp, i+1);
+                        scm->curpage = curp;
+                        scm->curslot = i + 1;
+                    }
+    //              return;
+                    // memcpy(record, rec, sizeof(Record));
+                    closePageFile(&fh);
+                    return RC_OK;
+                }
+                // freeRecord(record);
+            }
+        }
+    //      curs = 0;
+        curs = 0;
+    //      curp += 1;
+        curp += 1;
+        printf("going to page %d\n", curp);
+        break;
+    }
+    // cannot found, return error
+
+    // Value *val;
+    // Record *rec;
+    // freeVal(val); 
+    closePageFile(&fh);
+    return RC_RM_NO_MORE_TUPLES;
 }
 
 RC closeScan(RM_ScanHandle *scan) {
+    free(scan->mgmtData);
+    scan->rel = NULL;
+    scan->mgmtData = NULL;
     return RC_OK;
 }
-
 
 // dealing with schemas
 int getRecordStringSize(Schema *schema) {
