@@ -8,15 +8,26 @@
 #define BF_MODE RS_FIFO
 #define BF_PAGE 3
 
+int getLastPageNumber(char *fileName);
+
+// management data for RM_TableData
 typedef struct mgmt {
-    int records;
-    // BM_BufferPool *bm;
+    int records; // total records of the file
+    BM_BufferPool *bm;
     int lengthofrecord;
     int slotperpage;
     int last;
     char *name;
 } mgmt;
 
+// management data for RM_ScanHandle
+typedef struct scmgmt{
+    int curpage; // current page
+    int curslot; // current slot
+    Expr *cond;
+}scmgmt;
+
+// just print the value. for debug
 void print_value(char *name, Value *value) {
     printf("Value %s, Type : %d : ", name, value->dt);
     switch (value->dt) {
@@ -30,19 +41,14 @@ void print_value(char *name, Value *value) {
             printf("%d", value->v);
             break;
         case DT_STRING:
-            printf("%d : %d : %s", value->v, strlen(value->v.stringV), value->v);
+            printf("%d : %s", strlen(value->v.stringV), value->v);
             break;
     }
     printf("\n");
 }
 
+// print the content of the record. just for debug
 void print_record(Record *record, Schema *schema) {
-    // int i;
-    // Value *v = (Value *)record->data;
-    // printf("Record total : %d, page %d slot %d\n", schema->numAttr, record->id.page, record->id.slot);
-    // for (i = 0; i < schema->numAttr; i++) {
-    //     print_value(schema->attrNames[i], &v[i]);
-    // }
     int i, pos = 0;
     int a;
     float f;
@@ -161,6 +167,7 @@ int get_schema(char *str, int len, Schema **schema) {
     return pos;
 }
 
+// calculate each page can hold how many slot
 int slot_per_page(int size) {
     int r = PAGE_SIZE / size;
     int v = PAGE_SIZE / size;
@@ -179,7 +186,8 @@ RC shutdownRecordManager() {
     return RC_OK;
 }
 
-/*
+/*  !!!!!!!!!!!!!!!!!! very ver important !!!!!!!!!!!!!!!!!!
+
     **Information in Block 0
     - Total Records
     - Schema
@@ -241,7 +249,8 @@ RC openTable(RM_TableData *rel, char *name) {
 
     // printf("schema lloc %x\n", schema);
 
-    // // print all the informations
+    // // print all the informations, just for debug
+
     // printf("open page : total %d\n", tr);
     // printf("open page : schema t %d\n", schema->numAttr);
     // printf("open page : schema key %d\n", schema->keySize);
@@ -304,6 +313,7 @@ int getNumTuples(RM_TableData *rel) {
     return ((mgmt *) rel->mgmtData)->records;
 }
 
+// deprecated function which is not used
 void record_to_string(char *str, Record *record, Schema *sc) {
     int i, pos = 0;
     Value *v = (Value *)record->data;
@@ -325,6 +335,7 @@ void record_to_string(char *str, Record *record, Schema *sc) {
     }
 }
 
+// deprecated function which is not used
 void string_to_record(char *str, Record *record, Schema *sc) {
     int i, pos = 0;
     Value *val;
@@ -388,10 +399,6 @@ RC insertRecord(RM_TableData *rel, Record *record) {
     readBlock(last, &fh, ph);
     memcpy(flag, ph, sizeof(char) * slot);
 
-    // pinPage(bm, ph, last);
-    // memcpy(flag, ph->data, sizeof(char) * slot);
-    // unpinPage(bm, ph);
-
     for (newslot = slot - 1; newslot >=0; newslot--) {
         if (flag[newslot] == 1) {
             break;
@@ -414,14 +421,6 @@ RC insertRecord(RM_TableData *rel, Record *record) {
     memcpy(ph, flag, sizeof(char) * slot);
     memcpy(ph + newslot * size + sizeof(char) * slot, record->data, size);
     // printf("write offset : %u : %d\n", newslot * size + sizeof(char) * slot, size);
-
-    // pinPage(bm, ph, last);
-    // // update slog flag
-    // memcpy(ph->data, flag, sizeof(char) * slot);
-    // // insert record
-    // memcpy(ph->data + newslot * size + sizeof(char) * slot, strvalue, size);
-    // markDirty(bm, ph);
-    // unpinPage(bm, ph);
 
     writeBlock(last, &fh, ph);
     closePageFile(&fh);
@@ -458,20 +457,21 @@ RC deleteRecord(RM_TableData *rel, RID id) {
 
     flag[newslot] = 0;
 
-    char *strvalue = (char *) malloc(sizeof(char) * size);
-    memset(ph, 0, sizeof(char) * size);
+    // char *strvalue = (char *) malloc(sizeof(char) * size);
+    // memset(ph, 0, sizeof(char) * size);
 
     readBlock(last, &fh, ph);
     memcpy(ph, flag, sizeof(char) * slot);
-    memcpy(ph + newslot * size + sizeof(char) * slot, strvalue, size);
+    // memcpy(ph + newslot * size + sizeof(char) * slot, strvalue, size);
 
     writeBlock(last, &fh, ph);
     closePageFile(&fh);
 
     free(flag);
-    free(strvalue);
+    // free(strvalue);
     free(ph);
 
+    // decrease the total record number
     ((mgmt *) rel->mgmtData)->records -= 1;
     return RC_OK;
 }
@@ -485,7 +485,7 @@ RC updateRecord(RM_TableData *rel, Record *record) {
     slot = m->slotperpage;
     newslot = record->id.slot;
 
-    printf("updating page %d slot %d\n", last, newslot);
+    // printf("updating page %d slot %d\n", last, newslot);
 
     SM_FileHandle fh;
     SM_PageHandle ph;
@@ -553,12 +553,6 @@ RC getRecord(RM_TableData *rel, RID id, Record *record) {
     return RC_OK;
 }
 
-typedef struct scmgmt{
-    int curpage;
-    int curslot;
-    Expr *cond;
-}scmgmt;
-
 // scans
 RC startScan(RM_TableData *rel, RM_ScanHandle *scan, Expr *cond) {
     scmgmt *scm = (scmgmt *) malloc(sizeof(scmgmt));
@@ -578,11 +572,15 @@ RC next(RM_ScanHandle *scan, Record *record) {
 
     Value *val;
 
+    int tpage = getLastPageNumber(m->name);
+    // printf("total page %d\n", tpage);
+
     SM_FileHandle fh;
     SM_PageHandle ph;
     ph = (char *) malloc(sizeof(char) * PAGE_SIZE);
     memset(ph, 0, sizeof(char) * PAGE_SIZE);
     openPageFile(m->name, &fh);
+
 
     // let curp = scm->curpage
     int curp = scm->curpage;
@@ -594,7 +592,7 @@ RC next(RM_ScanHandle *scan, Record *record) {
     // char *str = (char *) malloc(sizeof(char) * length);
     char *flag = (char *) malloc(sizeof(char) * slots);
     int i;
-    while (1 == curp) {
+    while (curp < tpage) {
     //  read curp
         readBlock(curp, &fh, ph);
     //  get flags
@@ -603,7 +601,7 @@ RC next(RM_ScanHandle *scan, Record *record) {
         for (i = curs; i < slots; i++) {
     //      if flag available then
             if (flag[i] == 1) {
-                printf("check page %d: %d\n", curp, i);
+                // printf("check page %d: %d\n", curp, i);
     //          get string, string to record
                 memcpy(record->data, ph + sizeof(char) * slots + i * length, length);
                 // createRecord(&record, sc);
@@ -612,15 +610,15 @@ RC next(RM_ScanHandle *scan, Record *record) {
                 evalExpr(record, sc, scm->cond, &val);
     //          if equal
                 if (val->v.boolV == 1) {
-                    print_record(record, sc);
+                    // print_record(record, sc);
     //              save curpage, curslot
     //              if this is the end of slot, then next will be a new page
                     if (i == slots) {
-                        printf("new page\n");
+                        // printf("new page\n");
                         scm->curpage = curp + 1;
                         scm->curslot = 0;
                     } else {
-                        printf("save progress %d:%d\n", curp, i+1);
+                        // printf("save progress %d:%d\n", curp, i+1);
                         scm->curpage = curp;
                         scm->curslot = i + 1;
                     }
@@ -636,7 +634,7 @@ RC next(RM_ScanHandle *scan, Record *record) {
         curs = 0;
     //      curp += 1;
         curp += 1;
-        printf("going to page %d\n", curp);
+        // printf("going to page %d\n", curp);
         break;
     }
     // cannot found, return error
@@ -665,6 +663,7 @@ int getRecordSize(Schema *schema) {
                 sum += sizeof(int);
                 break;
             case DT_STRING :
+                // plus a size of int means the length of string
                 sum += schema->typeLength[i] + sizeof(int);
                 break;
             case DT_FLOAT :
@@ -705,6 +704,8 @@ RC createRecord(Record **record, Schema *schema) {
     Record *r = (Record *) malloc(sizeof(Record));
     // for a record, data is a array of values, so we should malloc space.
     // Value *v = (Value *) malloc(sizeof(Value) * schema->numAttr);
+
+    // malloc the memory for the string of record
     char *v = (char *) malloc(sizeof(char) * getRecordSize(schema));
     r->data = v;
     *record = r;
@@ -747,7 +748,7 @@ RC getAttr(Record *record, Schema *schema, int attrNum, Value **value) {
         case DT_STRING :
             c = (char *) malloc(sizeof(char) * schema->typeLength[i]);
             get_string(record->data, pos, c);
-            printf("get str %s\n", c);
+            // printf("get str %s\n", c);
             MAKE_STRING_VALUE(rec, c);
             free(c);
             break;
