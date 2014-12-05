@@ -1,4 +1,4 @@
-CC=gcc-4.9
+CC=gcc
 OBJ=test_assign3_1.o dberror.o storage_mgr.o buffer_mgr_stat.o buffer_mgr.o expr.o record_mgr.o rm_serializer.o
 OUT=record_mgr
 
