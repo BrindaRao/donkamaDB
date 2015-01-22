@@ -1,4 +1,4 @@
 donkamaDB
 =========
 
-Database implementation for CS 525
+Database implementation for CS course.
